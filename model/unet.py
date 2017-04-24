@@ -11,6 +11,7 @@ from collections import namedtuple
 from .ops import conv2d, deconv2d, lrelu, fc, batch_norm, init_embedding, conditional_instance_norm
 from .dataset import TrainDataProvider, InjectDataProvider
 from .utils import scale_back, merge, save_concat_images
+import model.my_util
 
 # Auxiliary wrapper classes
 # Used to save handles(important nodes in computation graph) for later evaluation
@@ -44,19 +45,22 @@ class UNet(object):
         # experiment_dir is needed for training
         if experiment_dir:
             self.data_dir = os.path.join(self.experiment_dir, "data")
-            self.checkpoint_dir = os.path.join(self.experiment_dir, "checkpoint")
-            self.sample_dir = os.path.join(self.experiment_dir, "sample")
-            self.log_dir = os.path.join(self.experiment_dir, "logs")
+            self.checkpoint_dir = model.my_util.check_dir(os.path.join(self.experiment_dir, "checkpoint"))
+            self.sample_dir = model.my_util.check_dir(os.path.join(self.experiment_dir, "sample"))
+            self.log_dir = model.my_util.check_dir(os.path.join(self.experiment_dir, "logs"))
 
-            if not os.path.exists(self.checkpoint_dir):
-                os.makedirs(self.checkpoint_dir)
-                print("create checkpoint directory")
-            if not os.path.exists(self.log_dir):
-                os.makedirs(self.log_dir)
-                print("create log directory")
-            if not os.path.exists(self.sample_dir):
-                os.makedirs(self.sample_dir)
-                print("create sample directory")
+            # if not os.path.exists(self.checkpoint_dir):
+            #     os.makedirs(self.checkpoint_dir)
+            #     print("create checkpoint directory")
+            # if not os.path.exists(self.log_dir):
+            #     os.makedirs(self.log_dir)
+            #     print("create log directory")
+            # if not os.path.exists(self.sample_dir):
+            #     os.makedirs(self.sample_dir)
+            #     print("create sample directory")
+        self.sw = model.my_util.StopWatch(self.experiment_dir)
+        self.sw.start()
+        print(self.sw.now("start initialize"))
 
     def encoder(self, images, is_training, reuse=False):
         with tf.variable_scope("generator"):
@@ -324,7 +328,7 @@ class UNet(object):
     def validate_model(self, val_iter, epoch, step):
         labels, images = next(val_iter)
         fake_imgs, real_imgs, d_loss, g_loss, l1_loss = self.generate_fake_samples(images, labels)
-        print("Sample: d_loss: %.5f, g_loss: %.5f, l1_loss: %.5f" % (d_loss, g_loss, l1_loss))
+        print(self.sw.now("Sample: d_loss: %.5f, g_loss: %.5f, l1_loss: %.5f" % (d_loss, g_loss, l1_loss)))
 
         merged_fake_images = merge(scale_back(fake_imgs), [self.batch_size, 1])
         merged_real_images = merge(scale_back(real_imgs), [self.batch_size, 1])
@@ -451,8 +455,9 @@ class UNet(object):
             op = tf.assign(var, val, validate_shape=False)
             self.sess.run(op)
 
-    def train(self, lr=0.0002, epoch=100, schedule=10, resume=True,
+    def train(self, lr=0.0002, epoch=100, schedule=10, resume=False,
               freeze_encoder=False, fine_tune=None, sample_steps=50, checkpoint_steps=500):
+
         g_vars, d_vars = self.retrieve_trainable_vars(freeze_encoder=freeze_encoder)
         input_handle, loss_handle, _, summary_handle = self.retrieve_handles()
 
@@ -481,6 +486,7 @@ class UNet(object):
         current_lr = lr
         counter = 0
         start_time = time.time()
+        print(self.sw.now("train start"))
         for ei in range(epoch):
             train_batch_iter = data_provider.get_train_iter(self.batch_size)
 
@@ -488,7 +494,7 @@ class UNet(object):
                 update_lr = current_lr / 2.0
                 # minimum learning rate guarantee
                 update_lr = max(update_lr, 0.0002)
-                print("decay learning rate from %.5f to %.5f" % (current_lr, update_lr))
+                print(self.sw.now("decay learning rate from %.5f to %.5f" % (current_lr, update_lr)))
                 current_lr = update_lr
 
             for bid, batch in enumerate(train_batch_iter):
@@ -529,8 +535,8 @@ class UNet(object):
                 passed = time.time() - start_time
                 log_format = "Epoch: [%2d], [%4d/%4d] time: %4.4f, d_loss: %.5f, g_loss: %.5f, " + \
                              "category_loss: %.5f, cheat_loss: %.5f, const_loss: %.5f, l1_loss: %.5f, tv_loss: %.5f"
-                print(log_format % (ei, bid, total_batches, passed, batch_d_loss, batch_g_loss,
-                                    category_loss, cheat_loss, const_loss, l1_loss, tv_loss))
+                print(self.sw.elapsed(log_format % (ei, bid, total_batches, passed, batch_d_loss, batch_g_loss,
+                                    category_loss, cheat_loss, const_loss, l1_loss, tv_loss)))
                 summary_writer.add_summary(d_summary, counter)
                 summary_writer.add_summary(g_summary, counter)
 
@@ -539,8 +545,9 @@ class UNet(object):
                     self.validate_model(val_batch_iter, ei, counter)
 
                 if counter % checkpoint_steps == 0:
-                    print("Checkpoint: save checkpoint step %d" % counter)
+                    print(self.sw.now("Checkpoint: save checkpoint step %d" % counter))
                     self.checkpoint(saver, counter)
         # save the last checkpoint
-        print("Checkpoint: last checkpoint step %d" % counter)
+        print(self.sw.now("Checkpoint: last checkpoint step %d" % counter))
         self.checkpoint(saver, counter)
+        print(self.sw.now("Training complete"))

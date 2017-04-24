@@ -3,12 +3,17 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import os
+import io
 import glob
 
 import imageio
 import scipy.misc as misc
 import numpy as np
-from cStringIO import StringIO
+# try:
+#     from cStringIO import StringIO
+# except ImportError:
+#     from io import StringIO
+# from cStringIO import StringIO
 
 
 def pad_seq(seq, batch_size):
@@ -22,8 +27,8 @@ def pad_seq(seq, batch_size):
 
 
 def bytes_to_file(bytes_img):
-    return StringIO(bytes_img)
-
+    # return StringIO(bytes_img)
+    return io.BytesIO(bytes_img)
 
 def normalize_image(img):
     """

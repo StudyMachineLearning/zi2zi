@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function
 
 import argparse
-import sys
 import numpy as np
 import os
 from PIL import Image
@@ -11,9 +9,7 @@ from PIL import ImageDraw
 from PIL import ImageFont
 import json
 import collections
-
-reload(sys)
-sys.setdefaultencoding("utf-8")
+import model.my_util
 
 CN_CHARSET = None
 CN_T_CHARSET = None
@@ -74,12 +70,21 @@ def font2img(src, dst, charset, char_size, canvas_size,
 
     filter_hashes = set()
     if filter_by_hash:
-        filter_hashes = set(filter_recurring_hash(charset, dst_font, canvas_size, x_offset, y_offset))
+        filter_hashes = set(filter_recurring_hash(charset, src_font, canvas_size, x_offset, y_offset))
+        print("filter hashes -> %s" % (",".join([str(h) for h in filter_hashes])))
+        filter_hashes_dest = set(filter_recurring_hash(charset, dst_font, canvas_size, x_offset, y_offset))
+        filter_hashes = filter_hashes.union(filter_hashes_dest)
         print("filter hashes -> %s" % (",".join([str(h) for h in filter_hashes])))
 
     count = 0
 
+    generatedList = list()
     for c in charset:
+        if ord(c) <= 19968:
+            continue
+        if c in generatedList:
+            continue
+        generatedList.append(c)
         if count == sample_count:
             break
         e = draw_example(c, src_font, dst_font, canvas_size, x_offset, y_offset, filter_hashes)
@@ -90,31 +95,67 @@ def font2img(src, dst, charset, char_size, canvas_size,
                 print("processed %d chars" % count)
 
 
-load_global_charset()
-parser = argparse.ArgumentParser(description='Convert font to images')
-parser.add_argument('--src_font', dest='src_font', required=True, help='path of the source font')
-parser.add_argument('--dst_font', dest='dst_font', required=True, help='path of the target font')
-parser.add_argument('--filter', dest='filter', type=int, default=0, help='filter recurring characters')
-parser.add_argument('--charset', dest='charset', type=str, default='CN',
-                    help='charset, can be either: CN, JP, KR or a one line file')
-parser.add_argument('--shuffle', dest='shuffle', type=int, default=0, help='shuffle a charset before processings')
-parser.add_argument('--char_size', dest='char_size', type=int, default=150, help='character size')
-parser.add_argument('--canvas_size', dest='canvas_size', type=int, default=256, help='canvas size')
-parser.add_argument('--x_offset', dest='x_offset', type=int, default=20, help='x offset')
-parser.add_argument('--y_offset', dest='y_offset', type=int, default=20, help='y_offset')
-parser.add_argument('--sample_count', dest='sample_count', type=int, default=1000, help='number of characters to draw')
-parser.add_argument('--sample_dir', dest='sample_dir', help='directory to save examples')
-parser.add_argument('--label', dest='label', type=int, default=0, help='label as the prefix of examples')
-
-args = parser.parse_args()
-
 if __name__ == "__main__":
-    if args.charset in ['CN', 'JP', 'KR', 'CN_T']:
-        charset = locals().get("%s_CHARSET" % args.charset)
-    else:
-        charset = [c for c in open(args.charset).readline()[:-1].decode("utf-8")]
-    if args.shuffle:
-        np.random.shuffle(charset)
-    font2img(args.src_font, args.dst_font, charset, args.char_size,
-             args.canvas_size, args.x_offset, args.y_offset,
-             args.sample_count, args.sample_dir, args.label, args.filter)
+
+    parser = argparse.ArgumentParser(description='Convert font to images')
+    parser.add_argument('--src_font', default="", help='path of the source font')
+    parser.add_argument('--dst_font', dest='dst_font', default="",
+                        help='path of the target font')
+    parser.add_argument('--filter', dest='filter', type=bool, default=True, help='filter recurring characters')
+    parser.add_argument('--charset', dest='charset', type=str, default='CN',
+                        help='charset, can be either: CN, JP, KR or a one line file')
+    parser.add_argument('--shuffle', dest='shuffle', type=int, default=0, help='shuffle a charset before processings')
+    parser.add_argument('--char_size', dest='char_size', type=int, default=150, help='character size')
+    parser.add_argument('--canvas_size', dest='canvas_size', type=int, default=256, help='canvas size')
+    parser.add_argument('--x_offset', dest='x_offset', type=int, default=20, help='x offset')
+    parser.add_argument('--y_offset', dest='y_offset', type=int, default=20, help='y_offset')
+    parser.add_argument('--sample_count', dest='sample_count', type=int, default=2000,
+                        help='number of characters to draw')
+    parser.add_argument('--sample_dir', default="", help='directory to save examples')
+    parser.add_argument('--label', dest='label', type=int, default=0, help='label as the prefix of examples')
+
+    args = parser.parse_args()
+    try:
+        # load_global_charset()
+        if args.src_font == "":
+            args.src_font = "C:/TMP/TTF/qg_simple.ttf"
+        if args.dst_font == "":
+            args.dst_font = "C:/TMP/TTF/simsun.ttf"
+
+        if args.sample_dir == "":
+            args.sample_dir = "C:/TMP/zi4zi/output_pic"
+
+        output_path = model.my_util.check_dir(args.sample_dir)
+        root_path = model.my_util.check_dir_disk("TMP")
+        wordFFN = os.path.join(root_path, "WordFiles", "Words.txt")
+
+        filterList = list()
+        for c in list(list(".,:;：，。? ")):
+            if c in filterList:
+                continue
+            filterList.append(c)
+        print(filterList)
+        charset = list()
+        with open(wordFFN, 'rb', newline=None) as f:
+            for line in f:
+                for c in list(line.decode('utf-8').strip()):
+                    if ord(c) <= 19968 or c in filterList or c in charset:
+                        continue
+                    charset.append(c)
+
+        # if args.charset in ['CN', 'JP', 'KR', 'CN_T']:
+        #     charset = locals().get("%s_CHARSET" % args.charset)
+        # else:
+        #     charset = [c for c in open(args.charset).readline()[:-1].decode("utf-8")]
+        if args.shuffle:
+            np.random.shuffle(charset)
+
+        font2img(args.src_font, args.dst_font, charset, args.char_size,
+                 args.canvas_size, args.x_offset, args.y_offset,
+                 args.sample_count, args.sample_dir, args.label, args.filter)
+
+        print("OK..")
+    except Exception as e:
+        print("initial validation failed")
+        print(e)
+        raise e
