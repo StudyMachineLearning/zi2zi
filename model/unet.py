@@ -357,7 +357,10 @@ class UNet(object):
         for idx, bm_pred in enumerate(fake_imgs):
             pred_y = ((bm_pred * 255.).astype(dtype=np.int16) % 256).reshape(-1, 256 * 256 * 3)[0]
             pred_y = my_util.preproc(my_util.to_binary(pred_y))
-            y = real_imgs[idx].reshape(-1, 256 * 256 * 3)[0]
+            # y = real_imgs[idx].reshape(-1, 256 * 256 * 3)[0]
+            bm_y = real_imgs[idx]
+            y = ((bm_y * 255.).astype(dtype=np.int16) % 256).reshape(-1, 256 * 256 * 3)[0]
+            y = my_util.preproc(my_util.to_binary(y))
             acc, acc_zero = my_util.validate_accuracy(pred_y, y)
             accuracy += acc
             accuracy_zero += acc_zero

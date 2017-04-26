@@ -61,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--embedding_num', dest='embedding_num', type=int, default=40,
                         help="number for distinct embeddings")
     parser.add_argument('--embedding_dim', dest='embedding_dim', type=int, default=128, help="dimension for embedding")
-    parser.add_argument('--epoch', dest='epoch', type=int, default=100, help='number of epoch')
+    parser.add_argument('--epoch', dest='epoch', type=int, default=300, help='number of epoch')
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=16, help='number of examples in batch')
     parser.add_argument('--lr', dest='lr', type=float, default=0.001, help='initial learning rate for adam')
     parser.add_argument('--schedule', dest='schedule', type=int, default=10,
