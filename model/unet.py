@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function
 
 import tensorflow as tf
 import numpy as np
@@ -11,7 +10,9 @@ from collections import namedtuple
 from .ops import conv2d, deconv2d, lrelu, fc, batch_norm, init_embedding, conditional_instance_norm
 from .dataset import TrainDataProvider, InjectDataProvider
 from .utils import scale_back, merge, save_concat_images
-import model.my_util
+import model.my_util as my_util
+import datetime
+import pickle
 
 # Auxiliary wrapper classes
 # Used to save handles(important nodes in computation graph) for later evaluation
@@ -23,10 +24,13 @@ SummaryHandle = namedtuple("SummaryHandle", ["d_merged", "g_merged"])
 
 
 class UNet(object):
-    def __init__(self, experiment_dir=None, experiment_id=0, batch_size=16, input_width=256, output_width=256,
+    def __init__(self, experiment_dir, output_folder_root, experiment_id=0, batch_size=16, input_width=256,
+                 output_width=256,
                  generator_dim=64, discriminator_dim=64, L1_penalty=100, Lconst_penalty=15, Ltv_penalty=0.0,
                  embedding_num=40, embedding_dim=128, input_filters=3, output_filters=3):
         self.experiment_dir = experiment_dir
+        if experiment_dir is None or experiment_dir == "":
+            raise Exception("Please set experiment dir")
         self.experiment_id = experiment_id
         self.batch_size = batch_size
         self.input_width = input_width
@@ -43,22 +47,15 @@ class UNet(object):
         # init all the directories
         self.sess = None
         # experiment_dir is needed for training
-        if experiment_dir:
-            self.data_dir = os.path.join(self.experiment_dir, "data")
-            self.checkpoint_dir = model.my_util.check_dir(os.path.join(self.experiment_dir, "checkpoint"))
-            self.sample_dir = model.my_util.check_dir(os.path.join(self.experiment_dir, "sample"))
-            self.log_dir = model.my_util.check_dir(os.path.join(self.experiment_dir, "logs"))
-
-            # if not os.path.exists(self.checkpoint_dir):
-            #     os.makedirs(self.checkpoint_dir)
-            #     print("create checkpoint directory")
-            # if not os.path.exists(self.log_dir):
-            #     os.makedirs(self.log_dir)
-            #     print("create log directory")
-            # if not os.path.exists(self.sample_dir):
-            #     os.makedirs(self.sample_dir)
-            #     print("create sample directory")
-        self.sw = model.my_util.StopWatch(self.experiment_dir)
+        self.data_dir = os.path.join(self.experiment_dir, "data")
+        if output_folder_root is None or output_folder_root == "":
+            output_folder_root = os.path.join(self.experiment_dir, "epoch_{0}_{1}".format(self.experiment_id,
+                                                                                          datetime.datetime.now().strftime(
+                                                                                              '%m%d%H')))
+        self.checkpoint_dir = my_util.check_dir(os.path.join(output_folder_root, "checkpoint"))
+        self.sample_dir = my_util.check_dir(os.path.join(output_folder_root, "sample"))
+        self.log_dir = my_util.check_dir(os.path.join(output_folder_root, "logs"))
+        self.sw = my_util.StopWatch(output_folder_root)
         self.sw.start()
         print(self.sw.now("start initialize"))
 
@@ -258,8 +255,11 @@ class UNet(object):
         setattr(self, "eval_handle", eval_handle)
         setattr(self, "summary_handle", summary_handle)
 
+        print(self.sw.elapsed("build_model"))
+
     def register_session(self, sess):
         self.sess = sess
+        print(self.sw.elapsed("register_session"))
 
     def retrieve_trainable_vars(self, freeze_encoder=False):
         t_vars = tf.trainable_variables()
@@ -328,20 +328,45 @@ class UNet(object):
     def validate_model(self, val_iter, epoch, step):
         labels, images = next(val_iter)
         fake_imgs, real_imgs, d_loss, g_loss, l1_loss = self.generate_fake_samples(images, labels)
+
         print(self.sw.now("Sample: d_loss: %.5f, g_loss: %.5f, l1_loss: %.5f" % (d_loss, g_loss, l1_loss)))
 
         merged_fake_images = merge(scale_back(fake_imgs), [self.batch_size, 1])
         merged_real_images = merge(scale_back(real_imgs), [self.batch_size, 1])
+
         merged_pair = np.concatenate([merged_real_images, merged_fake_images], axis=1)
 
-        model_id, _ = self.get_model_id_and_dir()
-
-        model_sample_dir = os.path.join(self.sample_dir, model_id)
-        if not os.path.exists(model_sample_dir):
-            os.makedirs(model_sample_dir)
+        # model_id, _ = self.get_model_id_and_dir()
+        #
+        # model_sample_dir = os.path.join(self.sample_dir, model_id)
+        # if not os.path.exists(model_sample_dir):
+        #     os.makedirs(model_sample_dir)
+        model_sample_dir = self.sample_dir
 
         sample_img_path = os.path.join(model_sample_dir, "sample_%02d_%04d.png" % (epoch, step))
         misc.imsave(sample_img_path, merged_pair)
+        imgs_pickle = os.path.join(model_sample_dir, "fake_img_%02d_%04d.dat" % (epoch, step))
+        with open(imgs_pickle, 'wb', True) as f:
+            pickle.dump((real_imgs, fake_imgs), f, protocol=pickle.HIGHEST_PROTOCOL)
+
+        # fake_imgs_lst = list()
+        # real_imgs_lst = list()
+        # for idx, bm_pred in enumerate(fake_imgs):
+        #     bm_y = real_imgs[idx]
+        #     gray_im = bm_pred.convert('L')
+        #     bm = my_util.to_binary(np.array(gray_im, dtype=np.int16))
+        #     fake_imgs_lst.append(bm)
+        #     real_imgs_lst.append(my_util.to_binary(np.array(bm_y.convert('L'), dtype=np.int16)))
+        #
+        # fake_img_array = np.array(fake_imgs_lst)
+        # real_img_array = np.array(real_imgs_lst)
+        # accuracy, accuracy_zero = my_util.validate_accuracy_array(fake_img_array, real_img_array)
+        # manhattan_norm, zero_norm = my_util.compare_images_array(fake_img_array, real_img_array)
+        accuracy = 0
+        accuracy_zero = 0
+        manhattan_norm = 0
+        zero_norm = 0
+        return (accuracy, accuracy_zero, manhattan_norm, zero_norm)
 
     def export_generator(self, save_dir, model_dir, model_name="gen_model"):
         saver = tf.train.Saver()
@@ -475,6 +500,7 @@ class UNet(object):
         data_provider = TrainDataProvider(self.data_dir, filter_by=fine_tune)
         total_batches = data_provider.compute_total_batch_num(self.batch_size)
         val_batch_iter = data_provider.get_val_iter(self.batch_size)
+        print(self.sw.now("total_batches -> {0}".format(total_batches)))
 
         saver = tf.train.Saver(max_to_keep=3)
         summary_writer = tf.summary.FileWriter(self.log_dir, self.sess.graph)
@@ -536,13 +562,19 @@ class UNet(object):
                 log_format = "Epoch: [%2d], [%4d/%4d] time: %4.4f, d_loss: %.5f, g_loss: %.5f, " + \
                              "category_loss: %.5f, cheat_loss: %.5f, const_loss: %.5f, l1_loss: %.5f, tv_loss: %.5f"
                 print(self.sw.elapsed(log_format % (ei, bid, total_batches, passed, batch_d_loss, batch_g_loss,
-                                    category_loss, cheat_loss, const_loss, l1_loss, tv_loss)))
+                                                    category_loss, cheat_loss, const_loss, l1_loss, tv_loss)))
                 summary_writer.add_summary(d_summary, counter)
                 summary_writer.add_summary(g_summary, counter)
 
                 if counter % sample_steps == 0:
                     # sample the current model states with val data
-                    self.validate_model(val_batch_iter, ei, counter)
+                    (accuracy, accuracy_zero, manhattan_norm, zero_norm) = self.validate_model(val_batch_iter, ei,
+                                                                                               counter)
+                    print(self.sw.elapsed(
+                        "    accuracy: {0:.5f}, zero: {1:.5f}, Manhattan norm: {2:.5f}, Zero : {3:.5f}".format(accuracy,
+                                                                                                               accuracy_zero,
+                                                                                                               manhattan_norm,
+                                                                                                               zero_norm)))
 
                 if counter % checkpoint_steps == 0:
                     print(self.sw.now("Checkpoint: save checkpoint step %d" % counter))

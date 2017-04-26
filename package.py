@@ -9,6 +9,7 @@ import pickle
 import random
 import model.my_util
 
+
 def pickle_examples(paths, train_path, val_path, train_val_split=0.1):
     """
     Compile a list of examples into pickled format, so during
@@ -29,21 +30,20 @@ def pickle_examples(paths, train_path, val_path, train_val_split=0.1):
                         pickle.dump(example, ft)
 
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Compile list of images into a pickled object for training')
-    parser.add_argument('--dir', dest='dir',help='path of examples')
+    parser.add_argument('--dir', dest='dir', help='path of examples')
     parser.add_argument('--save_dir', dest='save_dir', help='path to save pickled files')
     parser.add_argument('--split_ratio', type=float, default=0.1, dest='split_ratio',
                         help='split ratio between train and val')
     args = parser.parse_args()
     try:
+        root_path = model.my_util.check_dir_disk(os.path.join("TMP", "zi4zi"))
         if args.dir is None or args.dir == "":
-            args.dir = "C:/TMP/zi4zi/output_pic"
+            args.dir = os.path.join("TMP", "output_pic")
 
         if args.save_dir is None or args.save_dir == "":
-            args.save_dir = "C:/TMP/zi4zi/data"
+            args.save_dir = os.path.join("TMP", "data")
 
         output_path = model.my_util.check_dir(args.save_dir)
         train_path = os.path.join(args.save_dir, "train.obj")
@@ -56,4 +56,3 @@ if __name__ == "__main__":
         print("initial validation failed")
         print(e)
         raise e
-

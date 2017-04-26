@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-from __future__ import absolute_import
+from __future__ import absolute_import, division, print_function
 
 import os
 import io
@@ -9,11 +8,6 @@ import glob
 import imageio
 import scipy.misc as misc
 import numpy as np
-# try:
-#     from cStringIO import StringIO
-# except ImportError:
-#     from io import StringIO
-# from cStringIO import StringIO
 
 
 def pad_seq(seq, batch_size):

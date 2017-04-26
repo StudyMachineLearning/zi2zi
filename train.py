@@ -3,9 +3,9 @@ from __future__ import absolute_import, division, print_function
 
 import tensorflow as tf
 import argparse
-import model.my_util
 import os
-import subprocess
+import model.my_util as my_util
+import datetime
 
 args = None
 
@@ -13,11 +13,23 @@ from model.unet import UNet
 
 
 def main(_):
+    output_folder_root = os.path.join(args.experiment_dir, "epoch_{0}_{1}".format(args.epoch,
+                                                                                  datetime.datetime.now().strftime(
+                                                                                      '%m%d%H')))
+
+    if args.debug == 1:
+        output_folder_root = os.path.join(args.experiment_dir, "epoch_{0}".format(args.epoch))
+
+    output_folder_root = my_util.check_dir(output_folder_root, clear_before=True)
+
+    mylog = my_util.my_log(output_folder_root)
+    mylog.info("args: {0}".format(args))
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
-        model = UNet(args.experiment_dir, batch_size=args.batch_size, experiment_id=args.experiment_id,
+        model = UNet(args.experiment_dir, output_folder_root, batch_size=args.batch_size,
+                     experiment_id=args.experiment_id,
                      input_width=args.image_size, output_width=args.image_size, embedding_num=args.embedding_num,
                      embedding_dim=args.embedding_dim, L1_penalty=args.L1_penalty, Lconst_penalty=args.Lconst_penalty,
                      Ltv_penalty=args.Ltv_penalty)
@@ -35,6 +47,8 @@ def main(_):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Train')
+    parser.add_argument('--debug', type=int, default='1',
+                        help='for indicate if debug')
     parser.add_argument('--experiment_dir', dest='experiment_dir',
                         help='experiment directory, data, samples,checkpoints,etc')
     parser.add_argument('--experiment_id', dest='experiment_id', type=int, default=0,
@@ -52,28 +66,26 @@ if __name__ == '__main__':
     parser.add_argument('--lr', dest='lr', type=float, default=0.001, help='initial learning rate for adam')
     parser.add_argument('--schedule', dest='schedule', type=int, default=10,
                         help='number of epochs to half learning rate')
-    parser.add_argument('--resume', dest='resume', type=int, default=1, help='resume from previous training')
+    parser.add_argument('--resume', dest='resume', type=int, default=0, help='resume from previous training')
     parser.add_argument('--freeze_encoder', dest='freeze_encoder', type=int, default=0,
                         help="freeze encoder weights during training")
     parser.add_argument('--fine_tune', dest='fine_tune', type=str, default=None,
                         help='specific labels id to be fine tuned')
     parser.add_argument('--inst_norm', dest='inst_norm', type=int, default=0,
                         help='use conditional instance normalization in your model')
-    parser.add_argument('--sample_steps', dest='sample_steps', type=int, default=10,
+    parser.add_argument('--sample_steps', dest='sample_steps', type=int, default=50,
                         help='number of batches in between two samples are drawn from validation set')
     parser.add_argument('--checkpoint_steps', dest='checkpoint_steps', type=int, default=500,
                         help='number of batches in between two checkpoints')
     args = parser.parse_args()
     try:
         if args.experiment_dir is None or args.experiment_dir == "":
-            args.experiment_dir = "C:/TMP/zi4zi"
-        # args.epoch = 5
-        # args.sample_steps = 2
-        mylog = model.my_util.my_log(args.experiment_dir)
-        mylog.info("args: {0}".format(args))
+            args.experiment_dir = my_util.check_dir_disk(os.path.join("TMP", "zi4zi"))
+
+        if args.debug == 1:
+            args.epoch = 10
+            args.sample_steps = 2
         tf.app.run()
-        print("OK..")
-        subprocess.call(["shutdown", "/f", "/s", "/t", "20"])
     except Exception as e:
         print("initial validation failed")
         print(e)

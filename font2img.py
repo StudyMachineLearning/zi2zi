@@ -4,28 +4,27 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import numpy as np
 import os
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
-import json
+from PIL import Image, ImageDraw, ImageFont
+# import json
 import collections
 import model.my_util
 
-CN_CHARSET = None
-CN_T_CHARSET = None
-JP_CHARSET = None
-KR_CHARSET = None
 
-DEFAULT_CHARSET = "./charset/cjk.json"
+# CN_CHARSET = None
+# CN_T_CHARSET = None
+# JP_CHARSET = None
+# KR_CHARSET = None
+
+# DEFAULT_CHARSET = "./charset/cjk.json"
 
 
-def load_global_charset():
-    global CN_CHARSET, JP_CHARSET, KR_CHARSET, CN_T_CHARSET
-    cjk = json.load(open(DEFAULT_CHARSET))
-    CN_CHARSET = cjk["gbk"]
-    JP_CHARSET = cjk["jp"]
-    KR_CHARSET = cjk["kr"]
-    CN_T_CHARSET = cjk["gb2312_t"]
+# def load_global_charset():
+#     global CN_CHARSET, JP_CHARSET, KR_CHARSET, CN_T_CHARSET
+#     cjk = json.load(open(DEFAULT_CHARSET))
+#     CN_CHARSET = cjk["gbk"]
+#     JP_CHARSET = cjk["jp"]
+#     KR_CHARSET = cjk["kr"]
+#     CN_T_CHARSET = cjk["gb2312_t"]
 
 
 def draw_single_char(ch, font, canvas_size, x_offset, y_offset):
@@ -71,13 +70,11 @@ def font2img(src, dst, charset, char_size, canvas_size,
     filter_hashes = set()
     if filter_by_hash:
         filter_hashes = set(filter_recurring_hash(charset, src_font, canvas_size, x_offset, y_offset))
-        print("filter hashes -> %s" % (",".join([str(h) for h in filter_hashes])))
         filter_hashes_dest = set(filter_recurring_hash(charset, dst_font, canvas_size, x_offset, y_offset))
         filter_hashes = filter_hashes.union(filter_hashes_dest)
         print("filter hashes -> %s" % (",".join([str(h) for h in filter_hashes])))
 
     count = 0
-
     generatedList = list()
     for c in charset:
         if ord(c) <= 19968:
@@ -109,21 +106,22 @@ if __name__ == "__main__":
     parser.add_argument('--canvas_size', dest='canvas_size', type=int, default=256, help='canvas size')
     parser.add_argument('--x_offset', dest='x_offset', type=int, default=20, help='x offset')
     parser.add_argument('--y_offset', dest='y_offset', type=int, default=20, help='y_offset')
-    parser.add_argument('--sample_count', dest='sample_count', type=int, default=2000,
+    parser.add_argument('--sample_count', dest='sample_count', type=int, default=1500,
                         help='number of characters to draw')
     parser.add_argument('--sample_dir', default="", help='directory to save examples')
     parser.add_argument('--label', dest='label', type=int, default=0, help='label as the prefix of examples')
 
     args = parser.parse_args()
     try:
+        root_path = model.my_util.check_dir_disk("TMP")
         # load_global_charset()
         if args.src_font == "":
-            args.src_font = "C:/TMP/TTF/qg_simple.ttf"
+            args.src_font = os.path.join(root_path, "TTF", "simkai.ttf")
         if args.dst_font == "":
-            args.dst_font = "C:/TMP/TTF/simsun.ttf"
+            args.dst_font = os.path.join(root_path, "TTF", "qg_simple.ttf")
 
         if args.sample_dir == "":
-            args.sample_dir = "C:/TMP/zi4zi/output_pic"
+            args.sample_dir = os.path.join(root_path, "zi4zi", "output_pic")
 
         output_path = model.my_util.check_dir(args.sample_dir)
         root_path = model.my_util.check_dir_disk("TMP")

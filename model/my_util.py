@@ -6,6 +6,8 @@ import glob
 import datetime
 import numpy as np
 import scipy.misc as misc
+from scipy.linalg import norm
+from scipy import sum, average
 from PIL import Image
 import pickle
 
@@ -100,10 +102,15 @@ def to_scale_binary(batch):
 def to_binary(bm):
     # if bm[np.where(bm < 255)].max() > 1:
     if ((bm < 255) & (bm > 1)).any():
-        rows, cols = bm.shape
-        for h in range(rows):
+        if len(bm.shape) == 2:
+            rows, cols = bm.shape
+            for h in range(rows):
+                for w in range(cols):
+                    bm[h, w] = 0 if bm[h, w] <= 127 else 255
+        else:
+            cols = bm.size
             for w in range(cols):
-                bm[h, w] = 0 if bm[h, w] <= 127 else 255
+                bm[w] = 0 if bm[w] <= 127 else 255
     return bm
 
 
@@ -207,32 +214,67 @@ def check_msg(message):
     return message
 
 
-def validate_array(pred_y, y, check_zero=False):
+#
+# def validate_array(pred_y, y, check_zero=False):
+#     num, w, h = y.shape
+#     batch_pred_y = preproc(to_scale_binary(pred_y)).reshape(-1, w * h)
+#     batch_y = preproc(to_scale_binary(y)).reshape(-1, w * h)
+#     # batch_pred_y = pred_y.reshape(-1, w * h)
+#     # batch_y = y.reshape(-1, w * h)
+#     accuracy = 0
+#     for idx, bm_x in enumerate(batch_pred_y):
+#         bm_y = batch_y[idx]
+#         accuracy += validate(bm_x, bm_y, check_zero) / num
+#     return accuracy
+#
+#
+# def validate(pred_y, y, check_zero=False):
+#     try:
+#         total_num = len(y)
+#         if check_zero:
+#             find_mask = np.nonzero(y == 0)
+#             pred_y = pred_y[find_mask]
+#             y = y[find_mask]
+#             total_num = len(y)
+#
+#         correct_pred = np.sum(np.equal(pred_y, y))
+#         # print("correct_pred:{0}, total_num:{1}".format(correct_pred, total_num))
+#         accuracy = float(correct_pred) / total_num
+#         return accuracy
+#     except Exception as e:
+#         print(e)
+
+
+def validate_accuracy_array(pred_y, y):
     num, w, h = y.shape
     batch_pred_y = preproc(to_scale_binary(pred_y)).reshape(-1, w * h)
     batch_y = preproc(to_scale_binary(y)).reshape(-1, w * h)
-    # batch_pred_y = pred_y.reshape(-1, w * h)
-    # batch_y = y.reshape(-1, w * h)
     accuracy = 0
+    accuracy_all = 0
     for idx, bm_x in enumerate(batch_pred_y):
         bm_y = batch_y[idx]
-        accuracy += validate(bm_x, bm_y, check_zero) / num
-    return accuracy
+
+        acc_all, acc = validate_accuracy(bm_x, bm_y)
+        accuracy_all += acc_all
+        accuracy += acc
+    return (accuracy_all / num, accuracy / num)
 
 
-def validate(pred_y, y, check_zero=False):
+def validate_accuracy(pred_y, y):
     try:
-        total_num = len(y)
-        if check_zero:
-            find_mask = np.nonzero(y == 0)
-            pred_y = pred_y[find_mask]
-            y = y[find_mask]
-            total_num = len(y)
+        accuracy_all = float(np.sum(np.equal(pred_y, y))) / len(y)
 
-        correct_pred = np.sum(np.equal(pred_y, y))
-        # print("correct_pred:{0}, total_num:{1}".format(correct_pred, total_num))
-        accuracy = float(correct_pred) / total_num
-        return accuracy
+        find_mask_zero = np.nonzero(y == 0)
+        pred_y_zero = pred_y[find_mask_zero]
+        y_zero = y[find_mask_zero]
+        accuracy_zero = float(np.sum(np.equal(pred_y_zero, y_zero))) / len(y_zero)
+
+        find_mask_one = np.nonzero(np.logical_not(y == 0))
+        pred_y_one = pred_y[find_mask_one]
+        y_one = y[find_mask_one]
+        accuracy_one = float(np.sum(np.equal(pred_y_one, y_one))) / len(y_one)
+        accuracy = accuracy_one - accuracy_zero
+        return (accuracy_all, accuracy)
     except Exception as e:
         print(e)
 
@@ -276,6 +318,57 @@ def get_batch(x, batch_size, curr_batch):
     return x[start_index:end_index]
 
 
+def compare_images_array(pred_y, y):
+    num = y.shape[0]
+    manhattan_norm = 0
+    zero_norm = 0
+    for idx, bm_x in enumerate(pred_y):
+        n_m, n_0 = compare_images(bm_x, y[idx])
+        # print("Manhattan norm:{0} / per pixel:{1}".format(n_m, n_m / bm_x.size))
+        # print("Zero norm:{0} / per pixel:{1}".format(n_0, n_0 * 1.0 / bm_x.size))
+        manhattan_norm += n_m / bm_x.size
+        zero_norm += n_0 * 1.0 / bm_x.size
+
+    return (manhattan_norm / num, zero_norm / num)
+
+
+def compare_images(img1, img2):
+    img1 = to_grayscale(img1)
+    img2 = to_grayscale(img2)
+    # normalize to compensate for exposure difference
+    img1 = normalize(img1)
+    img2 = normalize(img2)
+    # calculate the difference and its norms
+    diff = img1 - img2  # elementwise for scipy arrays
+    m_norm = sum(abs(diff))  # Manhattan norm
+    z_norm = norm(diff.ravel(), 0)  # Zero norm
+    return (m_norm, z_norm)
+
+
+def to_grayscale(arr):
+    "If arr is a color image (3D array), convert it to grayscale (2D array)."
+    if len(arr.shape) == 3:
+        return average(arr, -1)  # average over the last axis (color channels)
+    else:
+        return arr
+
+
+def normalize(arr):
+    rng = arr.max() - arr.min()
+    amin = arr.min()
+    if rng == 0:
+        return arr
+    else:
+        return (arr - amin) * 255 / rng
+
+
+def save_to_pickle(x, save_path):
+    dir = check_dir(os.path.split(save_path)[0])
+    save_fullname = del_file_exist(os.path.join(dir, os.path.split(save_path)[1]))
+    with open(save_fullname, 'wb', True) as f:
+        pickle.dump(x, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 '''
 stopwatch
 '''
@@ -285,24 +378,10 @@ class StopWatch(object):
     """A simple timer class"""
 
     def __init__(self, logfile_folder):
-        # # if logfile_folder == "":
-        # #     logfile_folder = os.path.join(os.path.dirname(os.path.realpath(__file__)), "log")
-        # # if not logfile_folder.endswith("log"):
-        # #     logfile_folder = os.path.join(logfile_folder, "log")
-        # if logfile_folder == "":
-        #     logfile_folder = os.path.join(os.path.dirname(os.path.realpath(__file__)))
-
-        # logfile_folder = check_dir(logfile_folder, clear_before=False)
-        # LOG_FILENAME = os.path.join(logfile_folder, 'mylog.log')
-        # print("LogFileName:" + LOG_FILENAME)
-        # self.my_logger = logging.getLogger('MyLogger')
-        # self.my_logger.setLevel(logging.DEBUG)
-        # # Add the log message handler to the logger
-        # handler = logging.handlers.RotatingFileHandler(
-        #     LOG_FILENAME, maxBytes=3 * 1024 * 1024, backupCount=10)
-
-        # self.my_logger.addHandler(handler)
+        # self.my_logger = my_log(logfile_folder)
         self.my_logger = logging.getLogger('MyLogger')
+        if not self.my_logger.hasHandlers():
+            self.my_logger = my_log(logfile_folder)
         pass
 
     def start(self):
