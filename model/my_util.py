@@ -267,12 +267,18 @@ def validate_accuracy(pred_y, y):
         find_mask_zero = np.nonzero(y == 0)
         pred_y_zero = pred_y[find_mask_zero]
         y_zero = y[find_mask_zero]
-        accuracy_zero = float(np.sum(np.equal(pred_y_zero, y_zero))) / len(y_zero)
+        if len(y_zero) > 0:
+            accuracy_zero = float(np.sum(np.equal(pred_y_zero, y_zero))) / len(y_zero)
+        else:
+            accuracy_zero = 0
 
         find_mask_one = np.nonzero(np.logical_not(y == 0))
         pred_y_one = pred_y[find_mask_one]
         y_one = y[find_mask_one]
-        accuracy_one = float(np.sum(np.equal(pred_y_one, y_one))) / len(y_one)
+        if len(y_one) > 0:
+            accuracy_one = float(np.sum(np.equal(pred_y_one, y_one))) / len(y_one)
+        else:
+            accuracy_one = 0
         accuracy = accuracy_one - accuracy_zero
         return (accuracy_all, accuracy)
     except Exception as e:

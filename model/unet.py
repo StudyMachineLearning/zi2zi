@@ -349,24 +349,22 @@ class UNet(object):
         with open(imgs_pickle, 'wb', True) as f:
             pickle.dump((real_imgs, fake_imgs), f, protocol=pickle.HIGHEST_PROTOCOL)
 
-        # fake_imgs_lst = list()
-        # real_imgs_lst = list()
-        # for idx, bm_pred in enumerate(fake_imgs):
-        #     bm_y = real_imgs[idx]
-        #     gray_im = bm_pred.convert('L')
-        #     bm = my_util.to_binary(np.array(gray_im, dtype=np.int16))
-        #     fake_imgs_lst.append(bm)
-        #     real_imgs_lst.append(my_util.to_binary(np.array(bm_y.convert('L'), dtype=np.int16)))
-        #
-        # fake_img_array = np.array(fake_imgs_lst)
-        # real_img_array = np.array(real_imgs_lst)
-        # accuracy, accuracy_zero = my_util.validate_accuracy_array(fake_img_array, real_img_array)
-        # manhattan_norm, zero_norm = my_util.compare_images_array(fake_img_array, real_img_array)
+        num = real_imgs.shape[0]
         accuracy = 0
         accuracy_zero = 0
         manhattan_norm = 0
         zero_norm = 0
-        return (accuracy, accuracy_zero, manhattan_norm, zero_norm)
+        for idx, bm_pred in enumerate(fake_imgs):
+            pred_y = ((bm_pred * 255.).astype(dtype=np.int16) % 256).reshape(-1, 256 * 256 * 3)[0]
+            pred_y = my_util.preproc(my_util.to_binary(pred_y))
+            y = real_imgs[idx].reshape(-1, 256 * 256 * 3)[0]
+            acc, acc_zero = my_util.validate_accuracy(pred_y, y)
+            accuracy += acc
+            accuracy_zero += acc_zero
+            n_m, n_0 = my_util.compare_images(pred_y, y)
+            manhattan_norm += n_m / bm_pred.size
+            zero_norm += n_0 * 1.0 / bm_pred.size
+        return (accuracy / num, accuracy_zero / num, manhattan_norm / num, zero_norm / num)
 
     def export_generator(self, save_dir, model_dir, model_name="gen_model"):
         saver = tf.train.Saver()
