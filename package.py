@@ -40,10 +40,10 @@ if __name__ == "__main__":
     try:
         root_path = model.my_util.check_dir_disk(os.path.join("TMP", "zi4zi"))
         if args.dir is None or args.dir == "":
-            args.dir = os.path.join("TMP", "output_pic")
+            args.dir = os.path.join(root_path, "output_pic")
 
         if args.save_dir is None or args.save_dir == "":
-            args.save_dir = os.path.join("TMP", "data")
+            args.save_dir = os.path.join(root_path, "data")
 
         output_path = model.my_util.check_dir(args.save_dir)
         train_path = os.path.join(args.save_dir, "train.obj")
