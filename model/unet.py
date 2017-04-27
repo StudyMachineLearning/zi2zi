@@ -24,7 +24,8 @@ SummaryHandle = namedtuple("SummaryHandle", ["d_merged", "g_merged"])
 
 
 class UNet(object):
-    def __init__(self, experiment_dir, output_folder_root, experiment_id=0, batch_size=16, input_width=256,
+    def __init__(self, experiment_dir, output_folder_root, resume=False, experiment_id=0, batch_size=16,
+                 input_width=256,
                  output_width=256,
                  generator_dim=64, discriminator_dim=64, L1_penalty=100, Lconst_penalty=15, Ltv_penalty=0.0,
                  embedding_num=40, embedding_dim=128, input_filters=3, output_filters=3):
@@ -52,9 +53,10 @@ class UNet(object):
             output_folder_root = os.path.join(self.experiment_dir, "epoch_{0}_{1}".format(self.experiment_id,
                                                                                           datetime.datetime.now().strftime(
                                                                                               '%m%d%H')))
-        self.checkpoint_dir = my_util.check_dir(os.path.join(output_folder_root, "checkpoint"))
-        self.sample_dir = my_util.check_dir(os.path.join(output_folder_root, "sample"))
-        self.log_dir = my_util.check_dir(os.path.join(output_folder_root, "logs"))
+        clear_before = not resume
+        self.checkpoint_dir = my_util.check_dir(os.path.join(output_folder_root, "checkpoint"), clear_before)
+        self.sample_dir = my_util.check_dir(os.path.join(output_folder_root, "sample"), clear_before)
+        self.log_dir = my_util.check_dir(os.path.join(output_folder_root, "logs"), clear_before)
         self.sw = my_util.StopWatch(output_folder_root)
         self.sw.start()
         print(self.sw.now("start initialize"))
